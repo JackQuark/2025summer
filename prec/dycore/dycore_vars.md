@@ -1,6 +1,5 @@
 # Dycore Output Variables
 
-::: {.table-bordered}
 | Name | Shape | Type | Description |
 | --- | --- | --- | --- |
 | "convection_xyzt" | (200, 20, 64, 128) | f8 | --- |
@@ -43,4 +42,3 @@
 | "spe_tracers_p_xyzt" | (200, 20, 44, 43) | V16 | --- |
 | "spe_vor_c_xyzt" | (200, 20, 44, 43) | V16 | --- |
 | "spe_vor_p_xyzt" | (200, 20, 44, 43) | V16 | --- |
-:::
