@@ -140,7 +140,7 @@ def main():
         return c, title
         
     anim = FuncAnimation(fig, update_frame, frames=range(0, 4000), blit=False)
-    writer = FFMpegWriter(fps=50, metadata=dict(artist='Me'), bitrate=1800)
+    writer = FFMpegWriter(fps=50)
     anim.save("output.mp4", dpi=100, writer=writer)
         
 # ==================================================
