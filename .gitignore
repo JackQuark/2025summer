@@ -1,3 +1,6 @@
+*__pycache__/
+
+*.npy
 *.dat
 *.mp4
 *.png
