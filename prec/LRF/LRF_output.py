@@ -88,8 +88,7 @@ def main():
             zonal_T[:, ilat], 
             zonal_qv[:, ilat],
             ofname=f'./figs/LRF_kernel_{ilat}.png'
-            )
-        
+            )        
         total_LRF[ilat, ...] = LW + SW
     
     total_LRF[:32, ...] = np.flip(total_LRF[32:, ...], axis=0)
