@@ -5,16 +5,25 @@ import sys
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.colors as mplc
 from metpy.calc import moist_lapse
 from metpy.units import units
 import climlab
 # ==================================================
 # zonal mean temp., qv, pressure (20, 64)
-zonal_T  = np.load("/home/Quark/2025summer/prec/dycore/meanT.npy")
-zonal_qv = np.load("/home/Quark/2025summer/prec/dycore/meanqv.npy")
-zonal_p  = np.load("/home/Quark/2025summer/prec/dycore/meanp.npy") / 100.
+ref_T  = np.load("/home/Quark/2025summer/prec/dycore/avgt.npy")
+ref_qv = np.load("/home/Quark/2025summer/prec/dycore/avgqv.npy")
+ref_p  = np.linspace(20, 1000, 20)
 
-def LRF_calc_qv(p, t, qv, t_surf=288.):
+def LRF_calc_qv(p, t, qv, t_surf=288., mode='A'):
+    """
+    Args:
+        p (ndarray): pressure [hPa]
+        t (ndarray): temperature [K]
+        qv (ndarray): specific humidity [kg/kg]
+        t_surf (float): surface temperature [K]
+        mode (str): 'A' for human readable, 'B' for g/kg
+    """
     nlev = len(p)
     qvs  = climlab.utils.thermo.qsat(t, p)
     
@@ -51,36 +60,57 @@ def LRF_calc_qv(p, t, qv, t_surf=288.):
         LW_pert = rad_pert.diagnostics['TdotLW'].copy()
         SW_pert = rad_pert.diagnostics['TdotSW'].copy()
 
+        if mode == 'A':
+            deltaqv = 1
         # Compute kernel column (response at all levels to impulse at level k)
-        kernel_LW[:, k] = (LW_pert - LW_ref) # / deltaqv
-        kernel_SW[:, k] = (SW_pert - SW_ref) # / deltaqv
+        kernel_LW[:, k] = (LW_pert - LW_ref) / deltaqv
+        kernel_SW[:, k] = (SW_pert - SW_ref) / deltaqv
     
     fig, axs = plt.subplots(1, 2, figsize=(10, 5), sharex=True, sharey=True)
-    cs1 = axs[0].pcolormesh(p, p, (kernel_LW), cmap='RdBu_r',
-                            vmin=-0.5, vmax=0.5)
-    cs2 = axs[1].pcolormesh(p, p, (kernel_SW), cmap='RdBu_r',
-                            vmin=-0.5, vmax=0.5)
-    cbar = fig.colorbar(cs1, ax=axs)
-    for ax in axs:
-        ax.set_aspect('equal')
-    del ax
-    axs[0].set_xlim([1000, 10])
-    axs[0].set_ylim([1000, 10])
-    axs[0].set_xlabel('Perturbation level [hPa]')
-    axs[0].set_ylabel('Response level [hPa]')
-    axs[0].set_title('R_LW from qv [K/day per -20%RH]')
-    axs[1].set_title('R_SW from qv [K/day per -20%RH]')
+    if mode == 'A':
+        cs1 = axs[0].pcolormesh(p, p, (kernel_LW), cmap='RdBu_r',
+                                vmin=-0.5, vmax=0.5)
+        cs2 = axs[1].pcolormesh(p, p, (kernel_SW), cmap='RdBu_r',
+                                vmin=-0.5, vmax=0.5)
+        cbar = fig.colorbar(cs1, ax=axs)
+        for ax in axs:
+            ax.set_aspect('equal')
+        del ax
+        axs[0].set_xlim([1000, 10])
+        axs[0].set_ylim([1000, 10])
+        axs[0].set_xlabel('Perturbation level [hPa]')
+        axs[0].set_ylabel('Response level [hPa]')
+        axs[0].set_title('R_LW from qv [K/day per -20%RH]')
+        axs[1].set_title('R_SW from qv [K/day per -20%RH]')
+    elif mode == 'B':
+        
+        data_all = np.concatenate([(kernel_LW / 1000).ravel(),
+                                   (kernel_SW / 1000).ravel()])    # 展平成 1‑D
+        vmax = np.nanmax(np.abs(data_all))
+        norm = mplc.TwoSlopeNorm(vcenter=0.0, vmin=-vmax, vmax=vmax)
+        
+        cs1 = axs[0].pcolormesh(p, p, (kernel_LW)/1000, cmap='RdBu_r', norm=norm)
+        cs2 = axs[1].pcolormesh(p, p, (kernel_SW)/1000, cmap='RdBu_r', norm=norm)
+        cbar = fig.colorbar(cs1, ax=axs)
+        for ax in axs:
+            ax.set_aspect('equal')
+        del ax
+        axs[0].set_xlim([1000, 10])
+        axs[0].set_ylim([1000, 10])
+        axs[0].set_xlabel('Perturbation level [hPa]')
+        axs[0].set_ylabel('Response level [hPa]')
+        axs[0].set_title('R_LW from qv [K/day per g/kg]')
+        axs[1].set_title('R_SW from qv [K/day per g/kg]')
     
     return kernel_LW, kernel_SW
 
-def LRF_calc_T(p, t, qv, t_surf=288., ofname='LRF_kernel.png'):
+def LRF_calc_T(p, t, qv, t_surf=288.):
     nlev = len(p)
     qvs  = climlab.utils.thermo.qsat(t, p)
     
     state = climlab.column_state(lev=p, water_depth=1.0)
     state['Tatm'][:] = t
     state['Ts'][:] = t_surf
-    print(state)
     
     rad_base = climlab.radiation.RRTMG(name='Rad_base',
                                     state=state,
@@ -118,21 +148,21 @@ def LRF_calc_T(p, t, qv, t_surf=288., ofname='LRF_kernel.png'):
         kernel_LW[:, k] = (LW_pert - LW_ref) / delta_T
         kernel_SW[:, k] = (SW_pert - SW_ref) / delta_T
 
-    fig, axs = plt.subplots(1, 2, figsize=(10, 5), sharex=True, sharey=True)
-    cs1 = axs[0].pcolormesh(p, p, (kernel_LW), cmap='RdBu_r',
-                            vmin=-0.5, vmax=0.5)
-    cs2 = axs[1].pcolormesh(p, p, (kernel_SW), cmap='RdBu_r',
-                            vmin=-0.5, vmax=0.5)
-    cbar = fig.colorbar(cs1, ax=axs)
-    for ax in axs:
-        ax.set_aspect('equal')
-    del ax
-    axs[0].set_xlim([1000, 10])
-    axs[0].set_ylim([1000, 10])
-    axs[0].set_xlabel('Perturbation level [hPa]')
-    axs[0].set_ylabel('Response level [hPa]')
-    axs[0].set_title('R_LW from T [K/day per K]')
-    axs[1].set_title('R_SW from T [K/day per K]')
+    # fig, axs = plt.subplots(1, 2, figsize=(10, 5), sharex=True, sharey=True)
+    # cs1 = axs[0].pcolormesh(p, p, (kernel_LW), cmap='RdBu_r',
+    #                         vmin=-0.5, vmax=0.5)
+    # cs2 = axs[1].pcolormesh(p, p, (kernel_SW), cmap='RdBu_r',
+    #                         vmin=-0.5, vmax=0.5)
+    # cbar = fig.colorbar(cs1, ax=axs)
+    # for ax in axs:
+    #     ax.set_aspect('equal')
+    # del ax
+    # axs[0].set_xlim([1000, 10])
+    # axs[0].set_ylim([1000, 10])
+    # axs[0].set_xlabel('Perturbation level [hPa]')
+    # axs[0].set_ylabel('Response level [hPa]')
+    # axs[0].set_title('R_LW from T [K/day per K]')
+    # axs[1].set_title('R_SW from T [K/day per K]')
     
     return kernel_LW, kernel_SW
     # fig.savefig(ofname, dpi=150, bbox_inches='tight')
@@ -140,29 +170,35 @@ def LRF_calc_T(p, t, qv, t_surf=288., ofname='LRF_kernel.png'):
 def main():
     total_LRF = np.zeros((64, 20, 20))
     nlat, nlon = (64, 128)
-    dlat = 180.0 / nlat 
-    lat_centers = -90 + dlat/2 + np.arange(nlat) * dlat
-    
-    
-    for ilat in range(32, 64, 8):
+    dlat   = 180.0 / nlat 
+    lat    = -90 + dlat/2 + np.arange(nlat) * dlat
+    θc     = np.deg2rad(lat)
+    surf_T = 29. * np.exp(-(θc**2. / (2 * (26. * np.pi / 180.)**2.))) + 271.
+             
+    for ilat in range(32, 64):
+        print(f"processing lat={lat[ilat]:.2f}°")
         LW, SW =  LRF_calc_qv(
-            zonal_p[:, ilat], 
-            zonal_T[:, ilat], 
-            zonal_qv[:, ilat]
+            ref_p, 
+            ref_T[:, ilat],
+            ref_qv[:, ilat],
+            t_surf=surf_T[ilat],
+            mode='B'
             )
         total_LRF[ilat, ...] = LW + SW
         
-        continue
-        LW, SW =  LRF_calc_T(
-            zonal_p[:, ilat], 
-            zonal_T[:, ilat], 
-            zonal_qv[:, ilat],
-            ofname=f'./figs/LRF_kernel_{ilat}.png'
-            )        
-        total_LRF[ilat, ...] = LW + SW
+        # LW, SW =  LRF_calc_T(
+        #     ref_p, 
+        #     ref_T[:, ilat],
+        #     ref_qv[:, ilat],
+        #     t_surf=surf_T[ilat]
+        #     )       
+        # total_LRF[ilat, ...] = LW + SW
+        
+        plt.gcf().suptitle(f'Lat: {lat[ilat]:.2f}°', y=0.9)
+        plt.gcf().savefig(f'/home/Quark/2025summer/prec/LRF/figs/LRF_lat{ilat:02d}.png', dpi=150, bbox_inches='tight')
     
-    # total_LRF[:32, ...] = np.flip(total_LRF[32:, ...], axis=0)
-    # np.save('/home/Quark/2025summer/prec/LRF/LRF_Tpert.npy', total_LRF)
+    total_LRF[:32, ...] = np.flip(total_LRF[32:, ...], axis=0)
+    np.save('/home/Quark/2025summer/prec/LRF/LRF_qvpert.npy', total_LRF)
 
 # ==================================================
 from time import perf_counter
