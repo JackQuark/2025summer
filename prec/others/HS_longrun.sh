@@ -6,7 +6,7 @@
 # user settings
 output_dir="/home/Quark/Moist_Dycore/IdealizeSpetral/exp/HSt42"
 
-L=11 # latent heat
+L=20 # latent heat
 suffix="" # e.g. "_quack" 
 warmstart_file="None"
 
