@@ -17,7 +17,7 @@ space_day=2
 # output dir check
 if [ -d "$output_dir" ]; then
     echo "Output directory $output_dir exists."
-	cd $output_dir # script will work in the output directory
+	cd $output_dir
 
 	exp_dir="$output_dir/HSt42_${L}$suffix"
 
