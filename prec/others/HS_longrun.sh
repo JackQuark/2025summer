@@ -1,23 +1,24 @@
 #!/bin/bash
 # author: Quark
 # edit: 2025-07-13
-# script for HSt42 long run
+# script for HSt42 long run experiment
 # ==============================
 # user settings
-output_dir="/home/Quark/Moist_Dycore/IdealizeSpetral/exp/HSt42"
+# output_dir="/home/Quark/Moist_Dycore/IdealizeSpetral/exp"
+output_dir="/data92/Quark/LRFws"
 
 L=20 # latent heat
-suffix="" # e.g. "_quack" 
-warmstart_file="None"
+suffix="_ws500d_gLRF" # e.g. "_quack" 
+warmstart_file="/data92/Quark/ctrl_2000d/startfrom_475day_final.dat"
 
-start_day=0
-final_day=10
-space_day=2
+start_day=500
+final_day=1500
+space_day=25
 # ============================== move to output directory
 # output dir check
 if [ -d "$output_dir" ]; then
     echo "Output directory $output_dir exists."
-	cd $output_dir
+	cd $output_dir # script will work in the output directory
 
 	exp_dir="$output_dir/HSt42_${L}$suffix"
 
@@ -59,19 +60,20 @@ else
 	echo -n "None" > "firstday_file.txt"
 fi
 
+first_iter=1
 # main loop
 for i in `seq $start_day $space_day $final_day`; do	
 	if [ $i -lt $final_day ]; then
 		echo "Running from day $i to day $((i+space_day-1))"
 		echo "Warmstart file: $(cat firstday_file.txt)"
-		/home/Quark/julia-1.8.5/bin/julia /home/Quark/Moist_Dycore/IdealizeSpetral/exp/HSt42/Run_HS.jl
+		/home/Quark/julia-1.8.5/bin/julia /home/Quark/Moist_Dycore/IdealizeSpetral/exp/HSt42/Run_HS_Q.jl
 		# move 'all' file to data
 		# warmstart file will be left in the exp directory
 		mv "all_L"$L".dat" "data/RH80_L"$L"_"$final_day"day_startfrom_"$i"day.dat"
 		
 		# change warmstart file to default after first run (final of previous run)
-		if [ $i = 0 ]; then 
-			echo "test"
+		if [ "$first_iter" -eq 1 ]; then
+			first_iter=0
 			echo -n "warmstart_${L}.dat" > "firstday_file.txt"
 		fi
 
