@@ -8,35 +8,25 @@ import xarray    as xr
 import matplotlib.pyplot  as plt
 
 sys.path.append("/home/Quark/2025summer/tools")
-from dycore_reader import Dataset
+from dycore_dataset import Dataset
+from ufunc import *
 # ==================================================
 # calc. the mean state of atm from 1000 ~ 2000d data
-
-def save_mean_state(ds: Dataset):
-    """wrong version"""
-    meanp_tot  = np.zeros((20, 64))
-    meanT_tot  = np.zeros((20, 64))
-    meanqv_tot = np.zeros((20, 64))
+def save_mean_ps(ds: Dataset):
+    """global mean ps"""    
+    meanps = 0
     count = 0
     for iday in range(1000, 2000, 25):
-        f  = ds.open_HDF5(iday)
-        p  = f['grid_p_full_xyzt'][:]
-        T  = f['grid_t_c_xyzt'][:]
-        qv = f['grid_tracers_c_xyzt'][:]
-        
-        meanp_tot  += np.mean(p, axis=(0, 3))
-        meanT_tot  += np.mean(T, axis=(0, 3))
-        meanqv_tot += np.mean(qv, axis=(0, 3))
+        print(f"processing start from {iday} day", end='\r')
+        f = ds.open_HDF5(iday)
+        meanps += np.mean(f['grid_ps_c_xyzt'][:])
         count += 1
         f.close()
+    meanps /= count
+    with open("meanps.txt", "w") as f:
+        f.write(f"{meanps:.5f}")
+    print(f"mean surface pressure: {meanps:.2f} Pa")
     
-    meanp_tot  /= count
-    meanT_tot  /= count
-    meanqv_tot /= count
-    np.save("meanp.npy",  meanp_tot)
-    np.save("meanT.npy",  meanT_tot)
-    np.save("meanqv.npy", meanqv_tot)
-
 def lin_interp(x, xp, fp):
     if x[-1] > xp[-1]:
         s = (fp[-1] - fp[-2]) / (xp[-1] - xp[-2])
@@ -45,11 +35,9 @@ def lin_interp(x, xp, fp):
         right_val = fp[-1]
     return np.interp(x, xp, fp, right=right_val)
 
-def main():
+def interp_2_refp(ref_p: np.ndarray):
     datadir = "/data92/Quark/ctrl_2000d/HSt42_20"
     ds = Dataset(datadir)
-    p_ref = xr.DataArray(np.linspace(2000, 100000, 20), dims='pref')
-
     tavg = np.zeros((20, 64))
     qvavg = np.zeros((20, 64))
     count = 0
@@ -65,7 +53,7 @@ def main():
         # like np.apply_along_axis but more flexible :D
         t_interp: np.ndarray = xr.apply_ufunc(
             lin_interp,
-            p_ref, p, t,
+            ref_p, p, t,
             input_core_dims=[['pref'], ['lev'], ['lev']],
             output_core_dims=[['pref']],
             vectorize=True,            
@@ -73,7 +61,7 @@ def main():
             ).to_numpy().transpose(0, 3, 1, 2)
         qv_interp = xr.apply_ufunc(
             lin_interp,
-            p_ref, p, qv,
+            ref_p, p, qv,
             input_core_dims=[['pref'], ['lev'], ['lev']],
             output_core_dims=[['pref']],
             vectorize=True,            
@@ -83,22 +71,28 @@ def main():
         tavg  += np.mean(t_interp, axis=(0, 3))
         qvavg += np.mean(qv_interp, axis=(0, 3))
         count += 1
-        # t_interp = lin_interp(p_ref, p[0, :, 32, 0], t[0, :, 32, 0])
-        # qv_interp = lin_interp(p_ref, p[0, :, 32, 0], qv[0, :, 32, 0])
-        # test
-        # fig, axs = plt.subplots(1, 2, figsize=(10, 10), sharey=True)
-        # axs[0].plot(t_interp[0, 32, 0, 15:], p_ref[15:], '.-', label='interp')
-        # axs[0].plot(t[0, 15:, 32, 0], p[0, 15:, 32, 0], '.-', label='raw')
-        # axs[1].plot(qv_interp[0, 32, 0, 15:], p_ref[15:], label='interp')
-        # axs[1].plot(qv[0, 15:, 32, 0], p[0, 15:, 32, 0], label='raw')
-        # axs[1].invert_yaxis()
-    
+        f.close()
+        
     tavg  /= count
     qvavg /= count
     # save
-    np.save("tavg.npy", tavg)
-    np.save("qvavg.npy", qvavg)
+    np.save("avg_t.npy", tavg)
+    np.save("avg_qv.npy", qvavg)
+
+def main():
+    datadir = "/data92/Quark/ctrl_2000d"
+    ds = Dataset(datadir)
     
+    with open("mean_ps.txt", "r") as f:
+        meanps = float(f.read())    
+
+    ref_p_full = ps_to_p_full(meanps)
+    
+    print(ref_p_full)
+    
+    # np.savetxt("mean_p_full.dat", ref_p_full)
+    # interp_2_refp(ref_p=ref_p_full)
+
 # ==================================================
 from time import perf_counter
 if __name__ == '__main__':

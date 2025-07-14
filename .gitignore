@@ -2,6 +2,9 @@
 
 *.npy
 *.dat
+*.csv
+*.txt
+*.log
 *.mp4
 *.png
 *.jpg
